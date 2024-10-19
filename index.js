@@ -3,22 +3,42 @@ require('dotenv').config(); // Importar e configurar o dotenv
 const fs = require('fs');
 const path = require('path');
 const cron = require('node-cron');
-const { Client } = require('pg');
+const sqlite3 = require('sqlite3').verbose(); // Importar sqlite3
 const { XMLParser, XMLBuilder } = require('fast-xml-parser');
 const geolib = require('geolib');
 
 const gpxDirectory = path.join(__dirname, 'arquivos-gpx');
 
-const client = new Client({
-    connectionString: process.env.DATABASE_URL,
-    ssl: {
-        rejectUnauthorized: false
+// Inicializar conexão com SQLite
+const db = new sqlite3.Database(process.env.DATABASE_PATH || 'rotas.db', (err) => {
+    if (err) {
+        console.error('Erro ao conectar no banco de dados SQLite:', err.message);
+    } else {
+        console.log('Conectado ao banco de dados SQLite');
     }
 });
 
-client.connect()
-    .then(() => console.log('Conectado ao banco de dados PostgreSQL'))
-    .catch(err => console.error('Erro ao conectar no banco de dados:', err));
+// Criar tabela rotas_gps se não existir
+const createTableQuery = `
+    CREATE TABLE IF NOT EXISTS rotas_gps (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        rota_id TEXT,
+        empresa TEXT,
+        data_hora TEXT,
+        turno TEXT,
+        quilometragem REAL,
+        tempo_de_rota REAL,
+        arquivo_gpx TEXT
+    )
+`;
+
+db.run(createTableQuery, (err) => {
+    if (err) {
+        console.error('Erro ao criar tabela rotas_gps:', err.message);
+    } else {
+        console.log('Tabela rotas_gps pronta');
+    }
+});
 
 // Lista de feriados fixos no formato 'MM-DD'
 const feriadosFixos = [
@@ -84,13 +104,13 @@ function processGpxFiles() {
                 const [idRota, empresa, turnoComExtensao] = file.split('-');
                 const turno = turnoComExtensao.replace('.gpx', '');
 
-                // Mapear o turno para o horário correspondente (segunda a sexta)
+                // Mapear o turno para o horário correspondente (todos os dias)
                 const horarios = {
-                    'manha': '0 7 * * 1-5',
-                    'meio': '0 13 * * 1-5',
-                    'tarde': '30 18 * * 1-5',
-                    'noite': '0 19 * * 1-5',
-                    'madrugada': '25 19 * * 1-5'
+                    'manha': '0 7 * * *',        // 07:00 todos os dias
+                    'meio': '0 13 * * *',        // 13:00 todos os dias
+                    'tarde': '30 18 * * *',      // 18:30 todos os dias
+                    'noite': '0 19 * * *',       // 19:00 todos os dias
+                    'madrugada': '25 19 * * *'   // 19:25 todos os dias
                 };
 
                 const cronExpression = horarios[turno];
@@ -133,7 +153,7 @@ function sendDataToDatabase(filePath, { idRota, empresa, turno }) {
         if (err) {
             console.error('Erro ao ler o arquivo GPX:', err);
             return;
-        }
+        }})
 
         // Criar instâncias do XMLParser e XMLBuilder
         const xmlParser = new XMLParser({ ignoreAttributes: false });
@@ -245,26 +265,26 @@ function sendDataToDatabase(filePath, { idRota, empresa, turno }) {
 
         } catch (e) {
             console.error('Erro ao modificar dados do GPX:', e);
+            return; // Abortando a inserção no banco caso haja erro
         }
 
         // Preparar a data e hora atual
-        const dataHora = new Date();
+        const dataHora = new Date().toISOString(); // Formato 'YYYY-MM-DDTHH:MM:SSZ'
 
         // Inserir no banco de dados
         const query = `
             INSERT INTO rotas_gps (rota_id, empresa, data_hora, turno, quilometragem, tempo_de_rota, arquivo_gpx) 
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
         `;
         const values = [idRota, empresa, dataHora, turno, quilometragem, tempoRota, data];
 
-        client.query(query, values)
-            .then(res => {
-                console.log('Dados inseridos com sucesso:', res.rowCount);
-            })
-            .catch(err => {
-                console.error('Erro ao inserir dados no banco de dados:', err);
-            });
-    });
-}
+        db.run(query, values, function(err) {
+            if (err) {
+                console.error('Erro ao inserir dados no banco de dados:', err.message);
+            } else {
+                console.log('Dados inseridos com sucesso:', this.changes);
+            }
+        });
+    }
 
-processGpxFiles();
+    processGpxFiles();
