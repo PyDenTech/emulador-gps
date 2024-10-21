@@ -108,13 +108,12 @@ function processGpxFiles() {
 
                 // Mapear o turno para o horário correspondente (segunda a sexta)
                 const horarios = {
-                    'manha': '09 18 * * 1-5',
-                    'meio': '09 18 * * 1-5',
-                    'tarde': '09 18 * * 1-5',
-                    'noite': '09 18 * * 1-5',
-                    'madrugada': '09 18 * * 1-5'
+                    'manha': '13 18 * * *',        // 07:00 AM todos os dias
+                    'meio': '13 18 * * *',        // 01:00 PM todos os dias
+                    'tarde': '13 18 * * *',      // 06:30 PM todos os dias
+                    'noite': '13 18 * * *',       // 07:00 PM todos os dias
+                    'madrugada': '13 18 * * *'   // 11:45 PM todos os dias
                 };
-
                 const cronExpression = horarios[turno];
 
                 if (cronExpression) {
