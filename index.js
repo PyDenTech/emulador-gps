@@ -106,13 +106,13 @@ function processGpxFiles() {
                 const [idRota, empresa, turnoComExtensao] = file.split('-');
                 const turno = turnoComExtensao.replace('.gpx', '');
 
-                // Mapear o turno para o horário correspondente (segunda a sexta)
+                // Mapear o turno para o horário correspondente (todos os dias)
                 const horarios = {
-                    'manha': '13 18 * * *',        // 07:00 AM todos os dias
-                    'meio': '13 18 * * *',        // 01:00 PM todos os dias
-                    'tarde': '13 18 * * *',      // 06:30 PM todos os dias
-                    'noite': '13 18 * * *',       // 07:00 PM todos os dias
-                    'madrugada': '13 18 * * *'   // 11:45 PM todos os dias
+                    'manha': '0 7 * * *',        // 07:00 AM todos os dias
+                    'meio': '0 13 * * *',        // 01:00 PM todos os dias
+                    'tarde': '30 18 * * *',      // 06:30 PM todos os dias
+                    'noite': '0 19 * * *',       // 07:00 PM todos os dias
+                    'madrugada': '45 23 * * *'   // 11:45 PM todos os dias
                 };
                 const cronExpression = horarios[turno];
 
@@ -132,20 +132,11 @@ function processGpxFiles() {
 
 function scheduleTask(cronExpression, filePath, { idRota, empresa, turno }) {
     cron.schedule(cronExpression, () => {
-        const hoje = new Date();
-        const anoAtual = hoje.getFullYear();
-        const dataHoje = hoje.toISOString().slice(0, 10); // Formato 'YYYY-MM-DD'
-
-        const feriados = obterFeriados(anoAtual);
-
-        // Verificar se hoje é um feriado
-        if (feriados.includes(dataHoje)) {
-            console.log(`Hoje é feriado (${dataHoje}). A tarefa não será executada.`);
-            return;
-        }
-
+        // Removemos a verificação de feriados
         console.log(`Enviando dados do arquivo ${filePath} no turno ${turno}`);
         sendDataToDatabase(filePath, { idRota, empresa, turno });
+    }, {
+        timezone: "America/Sao_Paulo" // Defina o fuso horário conforme necessário
     });
 }
 
@@ -319,8 +310,6 @@ app.get('/relatorios', (req, res) => {
     });
 });
 
-
-// Rota para visualizar detalhes de uma rota específica
 // Rota para visualizar detalhes de uma rota específica
 app.get('/relatorios/:id', (req, res) => {
     const rotaId = req.params.id;
