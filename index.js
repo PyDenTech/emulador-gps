@@ -42,19 +42,7 @@ const db = new sqlite3.Database(dbPath, (err) => {
     });
 });
 
-// Lista de feriados fixos no formato 'MM-DD'
-const feriadosFixos = [
-    '01-01', // Ano Novo
-    '04-21', // Tiradentes
-    '05-01', // Dia do Trabalhador
-    '09-07', // Independência do Brasil
-    '10-12', // Nossa Senhora Aparecida
-    '11-02', // Finados
-    '11-15', // Proclamação da República
-    '12-25'  // Natal
-];
-
-// Função para calcular a data da Páscoa
+// Função para calcular a data da Páscoa (mantida caso queira utilizar no futuro)
 function calcularPascoa(ano) {
     const a = ano % 19;
     const b = Math.floor(ano / 100);
@@ -73,8 +61,19 @@ function calcularPascoa(ano) {
     return new Date(ano, mes - 1, dia);
 }
 
-// Função para obter a lista completa de feriados (fixos + móveis)
+// Função para obter a lista completa de feriados (fixos + móveis) (mantida caso queira utilizar no futuro)
 function obterFeriados(ano) {
+    const feriadosFixos = [
+        '01-01', // Ano Novo
+        '04-21', // Tiradentes
+        '05-01', // Dia do Trabalhador
+        '09-07', // Independência do Brasil
+        '10-12', // Nossa Senhora Aparecida
+        '11-02', // Finados
+        '11-15', // Proclamação da República
+        '12-25'  // Natal
+    ];
+
     const feriados = [...feriadosFixos.map(d => `${ano}-${d}`)];
 
     // Feriados móveis
@@ -94,6 +93,7 @@ function obterFeriados(ano) {
     return feriados;
 }
 
+// Função para processar arquivos GPX e agendar tarefas
 function processGpxFiles() {
     fs.readdir(gpxDirectory, (err, files) => {
         if (err) {
@@ -108,11 +108,11 @@ function processGpxFiles() {
 
                 // Mapear o turno para o horário correspondente (todos os dias)
                 const horarios = {
-                    'manha': '18 18 * * *',        // 07:00 AM todos os dias
-                    'meio': '18 18 * * *',        // 01:00 PM todos os dias
-                    'tarde': '18 18 * * *',      // 06:30 PM todos os dias
-                    'noite': '18 18 * * *',       // 07:00 PM todos os dias
-                    'madrugada': '18 18 * * *'   // 11:45 PM todos os dias
+                    'manha': '0 7 * * *',        // 07:00 AM todos os dias
+                    'meio': '0 13 * * *',        // 01:00 PM todos os dias
+                    'tarde': '30 18 * * *',      // 06:30 PM todos os dias
+                    'noite': '0 19 * * *',       // 07:00 PM todos os dias
+                    'madrugada': '45 23 * * *'   // 11:45 PM todos os dias
                 };
                 const cronExpression = horarios[turno];
 
@@ -130,9 +130,10 @@ function processGpxFiles() {
     });
 }
 
+// Função para agendar uma tarefa com node-cron
 function scheduleTask(cronExpression, filePath, { idRota, empresa, turno }) {
     cron.schedule(cronExpression, () => {
-        // Removemos a verificação de feriados
+        // Tarefa executada nos horários agendados
         console.log(`Enviando dados do arquivo ${filePath} no turno ${turno}`);
         sendDataToDatabase(filePath, { idRota, empresa, turno });
     }, {
@@ -140,6 +141,7 @@ function scheduleTask(cronExpression, filePath, { idRota, empresa, turno }) {
     });
 }
 
+// Função para enviar dados para o banco de dados
 function sendDataToDatabase(filePath, { idRota, empresa, turno }) {
     fs.readFile(filePath, 'utf8', (err, data) => {
         if (err) {
@@ -260,7 +262,7 @@ function sendDataToDatabase(filePath, { idRota, empresa, turno }) {
     });
 }
 
-// Iniciar o processamento dos arquivos GPX
+// Iniciar o processamento dos arquivos GPX e agendar tarefas
 processGpxFiles();
 
 // ================== CONFIGURAÇÃO DO EXPRESS ================== //
@@ -280,32 +282,63 @@ app.get('/', (req, res) => {
 // Rota para visualizar relatórios
 app.get('/relatorios', (req, res) => {
     const { empresa } = req.query;
-    let query = `SELECT * FROM rotas_gps`;
-    const params = [];
+    let detailedQuery = `SELECT * FROM rotas_gps`;
+    const detailedParams = [];
 
     if (empresa) {
-        query += ` WHERE empresa = ?`;
-        params.push(empresa);
+        detailedQuery += ` WHERE empresa = ?`;
+        detailedParams.push(empresa);
     }
 
-    query += ` ORDER BY data_hora DESC`;
+    detailedQuery += ` ORDER BY data_hora DESC`;
 
-    db.all(query, params, (err, rows) => {
+    db.all(detailedQuery, detailedParams, (err, rows) => {
         if (err) {
             console.error('Erro ao consultar o banco de dados:', err);
             res.status(500).send('Erro ao obter dados do banco.');
             return;
         }
 
-        // Obter lista única de empresas para o filtro
-        db.all(`SELECT DISTINCT empresa FROM rotas_gps`, [], (err, empresas) => {
+        // Query para dados agregados
+        let aggregateQuery = `
+            SELECT 
+                rota_id,
+                date(data_hora) as data,
+                SUM(quilometragem) as total_quilometragem,
+                AVG(tempo_de_rota) as avg_tempo_rota
+            FROM rotas_gps
+        `;
+        const aggregateParams = [];
+
+        if (empresa) {
+            aggregateQuery += ` WHERE empresa = ?`;
+            aggregateParams.push(empresa);
+        }
+
+        aggregateQuery += ` GROUP BY rota_id, date(data_hora) ORDER BY data DESC, rota_id`;
+
+        db.all(aggregateQuery, aggregateParams, (err, aggregateRows) => {
             if (err) {
-                console.error('Erro ao obter empresas:', err);
-                res.status(500).send('Erro ao obter dados do banco.');
+                console.error('Erro ao consultar dados agregados:', err);
+                res.status(500).send('Erro ao obter dados agregados do banco.');
                 return;
             }
 
-            res.render('relatorios', { rotas: rows, empresas: empresas.map(e => e.empresa), selectedEmpresa: empresa || '' });
+            // Obter lista única de empresas para o filtro
+            db.all(`SELECT DISTINCT empresa FROM rotas_gps`, [], (err, empresas) => {
+                if (err) {
+                    console.error('Erro ao obter empresas:', err);
+                    res.status(500).send('Erro ao obter dados do banco.');
+                    return;
+                }
+
+                res.render('relatorios', {
+                    rotas: rows,
+                    aggregate: aggregateRows,
+                    empresas: empresas.map(e => e.empresa),
+                    selectedEmpresa: empresa || ''
+                });
+            });
         });
     });
 });
