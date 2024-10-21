@@ -9,7 +9,7 @@ const { XMLParser, XMLBuilder } = require('fast-xml-parser');
 const geolib = require('geolib');
 
 const app = express();
-const PORT = process.env.PORT || 4000;
+const PORT = process.env.PORT || 3000;
 
 // Configurar o diretório de arquivos GPX
 const gpxDirectory = path.join(__dirname, 'arquivos-gpx');
