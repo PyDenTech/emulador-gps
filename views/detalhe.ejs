@@ -1,0 +1,85 @@
+<%- include('partials/header') %>
+
+    <h2>Detalhes da Rota ID: <%= rota.id %>
+    </h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Rota ID</th>
+                <th>Empresa</th>
+                <th>Data e Hora</th>
+                <th>Turno</th>
+                <th>Quilometragem (km)</th>
+                <th>Tempo de Rota (s)</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>
+                    <%= rota.id %>
+                </td>
+                <td>
+                    <%= rota.rota_id %>
+                </td>
+                <td>
+                    <%= rota.empresa %>
+                </td>
+                <td>
+                    <%= new Date(rota.data_hora).toLocaleString('pt-BR') %>
+                </td>
+                <td>
+                    <%= rota.turno %>
+                </td>
+                <td>
+                    <%= rota.quilometragem.toFixed(3) %>
+                </td>
+                <td>
+                    <%= rota.tempo_de_rota !==null ? rota.tempo_de_rota.toFixed(0) : 'N/A' %>
+                </td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h3>Mapa da Rota</h3>
+    <div id="map"></div>
+
+    <h3>Arquivo GPX</h3>
+    <p><a href="/relatorios/<%= rota.id %>/gpx" download="rota-<%= rota.rota_id %>.gpx">Baixar GPX</a></p>
+
+    <!-- Botão para voltar aos relatórios -->
+    <p><a href="/relatorios">← Voltar para Relatórios</a></p>
+
+    <%- include('partials/footer') %>
+
+        <!-- Incluir Leaflet CSS e JS -->
+        <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+        <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+        <!-- Incluir Leaflet.GPX Plugin -->
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-gpx/1.4.0/gpx.min.js"></script>
+
+        <script>
+            document.addEventListener('DOMContentLoaded', function () {
+                // Inicializar o mapa
+                var map = L.map('map').setView([-15.77972, -47.92972], 13); // Coordenadas iniciais (Brasília, por exemplo)
+
+                // Adicionar camada de tiles (OpenStreetMap)
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '&copy; OpenStreetMap contributors'
+                }).addTo(map);
+
+                // Adicionar o GPX ao mapa
+                var gpx = new L.GPX('/relatorios/<%= rota.id %>/gpx', {
+                    async: true,
+                    marker_options: {
+                        startIconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet-gpx/1.4.0/pin-icon-start.png',
+                        endIconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet-gpx/1.4.0/pin-icon-end.png',
+                        shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet-gpx/1.4.0/pin-shadow.png'
+                    }
+                }).on('loaded', function (e) {
+                    map.fitBounds(e.target.getBounds());
+                }).addTo(map);
+            });
+        </script>

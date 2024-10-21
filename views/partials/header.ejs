@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Emulador GPS - Relatórios</title>
+    <link rel="stylesheet" href="/css/styles.css">
+    <!-- Link para Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <header>
+        <h1>Emulador GPS</h1>
+        <nav>
+            <a href="/">Início</a>
+            <a href="/relatorios">Relatórios</a>
+            <button id="theme-toggle" class="btn" style="background-color: #3498db;">Tema Escuro</button>
+        </nav>
+    </header>
+    <main>
+
+        <script>
+            const toggleButton = document.getElementById('theme-toggle');
+            toggleButton.addEventListener('click', () => {
+                document.body.classList.toggle('dark-mode');
+                if (document.body.classList.contains('dark-mode')) {
+                    toggleButton.textContent = 'Tema Claro';
+                    toggleButton.style.backgroundColor = '#1abc9c';
+                } else {
+                    toggleButton.textContent = 'Tema Escuro';
+                    toggleButton.style.backgroundColor = '#3498db';
+                }
+            });
+        </script>

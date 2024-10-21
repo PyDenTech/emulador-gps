@@ -1,12 +1,17 @@
 require('dotenv').config(); // Importar e configurar o dotenv
 
-const fs = require('fs');
+const express = require('express');
 const path = require('path');
+const fs = require('fs');
 const cron = require('node-cron');
 const sqlite3 = require('sqlite3').verbose();
 const { XMLParser, XMLBuilder } = require('fast-xml-parser');
 const geolib = require('geolib');
 
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+// Configurar o diretório de arquivos GPX
 const gpxDirectory = path.join(__dirname, 'arquivos-gpx');
 
 // Configuração e conexão com o banco de dados SQLite
@@ -265,4 +270,100 @@ function sendDataToDatabase(filePath, { idRota, empresa, turno }) {
     });
 }
 
+// Iniciar o processamento dos arquivos GPX
 processGpxFiles();
+
+// ================== CONFIGURAÇÃO DO EXPRESS ================== //
+
+// Definir o motor de visualização como EJS
+app.set('view engine', 'ejs');
+app.set('views', path.join(__dirname, 'views'));
+
+// Servir arquivos estáticos da pasta 'public'
+app.use(express.static(path.join(__dirname, 'public')));
+
+// Rota principal - Página inicial
+app.get('/', (req, res) => {
+    res.render('index');
+});
+
+// Rota para visualizar relatórios
+app.get('/relatorios', (req, res) => {
+    const { empresa } = req.query;
+    let query = `SELECT * FROM rotas_gps`;
+    const params = [];
+
+    if (empresa) {
+        query += ` WHERE empresa = ?`;
+        params.push(empresa);
+    }
+
+    query += ` ORDER BY data_hora DESC`;
+
+    db.all(query, params, (err, rows) => {
+        if (err) {
+            console.error('Erro ao consultar o banco de dados:', err);
+            res.status(500).send('Erro ao obter dados do banco.');
+            return;
+        }
+
+        // Obter lista única de empresas para o filtro
+        db.all(`SELECT DISTINCT empresa FROM rotas_gps`, [], (err, empresas) => {
+            if (err) {
+                console.error('Erro ao obter empresas:', err);
+                res.status(500).send('Erro ao obter dados do banco.');
+                return;
+            }
+
+            res.render('relatorios', { rotas: rows, empresas: empresas.map(e => e.empresa), selectedEmpresa: empresa || '' });
+        });
+    });
+});
+
+
+// Rota para visualizar detalhes de uma rota específica
+// Rota para visualizar detalhes de uma rota específica
+app.get('/relatorios/:id', (req, res) => {
+    const rotaId = req.params.id;
+
+    db.get(`SELECT * FROM rotas_gps WHERE id = ?`, [rotaId], (err, row) => {
+        if (err) {
+            console.error('Erro ao consultar o banco de dados:', err);
+            res.status(500).send('Erro ao obter dados do banco.');
+            return;
+        }
+
+        if (!row) {
+            res.status(404).send('Rota não encontrada.');
+            return;
+        }
+
+        res.render('detalhe', { rota: row });
+    });
+});
+
+// Rota para obter o arquivo GPX de uma rota específica
+app.get('/relatorios/:id/gpx', (req, res) => {
+    const rotaId = req.params.id;
+
+    db.get(`SELECT arquivo_gpx FROM rotas_gps WHERE id = ?`, [rotaId], (err, row) => {
+        if (err) {
+            console.error('Erro ao consultar o banco de dados:', err);
+            res.status(500).send('Erro ao obter dados do banco.');
+            return;
+        }
+
+        if (!row) {
+            res.status(404).send('Rota não encontrada.');
+            return;
+        }
+
+        res.header('Content-Type', 'application/gpx+xml');
+        res.send(row.arquivo_gpx);
+    });
+});
+
+// Iniciar o servidor Express
+app.listen(PORT, () => {
+    console.log(`Servidor web rodando em http://localhost:${PORT}`);
+});

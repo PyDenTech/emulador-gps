@@ -1,0 +1,51 @@
+<%- include('partials/header') %>
+
+<h2>Relatórios de Rotas GPS</h2>
+
+<form method="GET" action="/relatorios">
+    <label for="empresa">Filtrar por Empresa:</label>
+    <select name="empresa" id="empresa">
+        <option value="">Todas</option>
+        <% empresas.forEach(function(emp) { %>
+            <option value="<%= emp %>" <%= selectedEmpresa === emp ? 'selected' : '' %>><%= emp %></option>
+        <% }); %>
+    </select>
+    <button type="submit">Filtrar</button>
+</form>
+
+<table>
+    <thead>
+        <tr>
+            <th>ID</th>
+            <th>Rota ID</th>
+            <th>Empresa</th>
+            <th>Data e Hora</th>
+            <th>Turno</th>
+            <th>Quilometragem (km)</th>
+            <th>Tempo de Rota (s)</th>
+            <th>Ações</th>
+        </tr>
+    </thead>
+    <tbody>
+        <% if (rotas.length === 0) { %>
+            <tr>
+                <td colspan="8">Nenhuma rota encontrada.</td>
+            </tr>
+        <% } else { %>
+            <% rotas.forEach(function(rota) { %>
+                <tr>
+                    <td><%= rota.id %></td>
+                    <td><%= rota.rota_id %></td>
+                    <td><%= rota.empresa %></td>
+                    <td><%= new Date(rota.data_hora).toLocaleString('pt-BR') %></td>
+                    <td><%= rota.turno %></td>
+                    <td><%= rota.quilometragem.toFixed(3) %></td>
+                    <td><%= rota.tempo_de_rota !== null ? rota.tempo_de_rota.toFixed(0) : 'N/A' %></td>
+                    <td><a href="/relatorios/<%= rota.id %>">Detalhes</a></td>
+                </tr>
+            <% }); %>
+        <% } %>
+    </tbody>
+</table>
+
+<%- include('partials/footer') %>
