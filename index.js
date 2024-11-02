@@ -1,4 +1,4 @@
-require('dotenv').config(); // Importar e configurar o dotenv
+require('dotenv').config();
 
 const express = require('express');
 const path = require('path');
@@ -33,6 +33,7 @@ const db = new sqlite3.Database(dbPath, (err) => {
             turno TEXT,
             quilometragem REAL,
             tempo_de_rota REAL,
+            descricao TEXT,
             arquivo_gpx TEXT
         )
     `, (err) => {
@@ -40,58 +41,25 @@ const db = new sqlite3.Database(dbPath, (err) => {
             console.error('Erro ao criar a tabela:', err);
         }
     });
+
+    // Adicionar a coluna 'descricao' se não existir
+    db.all(`PRAGMA table_info(rotas_gps);`, (err, columns) => {
+        if (err) {
+            console.error('Erro ao verificar colunas da tabela:', err);
+        } else {
+            const columnNames = columns.map(col => col.name);
+            if (!columnNames.includes('descricao')) {
+                db.run(`ALTER TABLE rotas_gps ADD COLUMN descricao TEXT`, (err) => {
+                    if (err) {
+                        console.error('Erro ao adicionar a coluna descricao:', err);
+                    } else {
+                        console.log('Coluna descricao adicionada com sucesso.');
+                    }
+                });
+            }
+        }
+    });
 });
-
-// Função para calcular a data da Páscoa (mantida caso queira utilizar no futuro)
-function calcularPascoa(ano) {
-    const a = ano % 19;
-    const b = Math.floor(ano / 100);
-    const c = ano % 100;
-    const d = Math.floor(b / 4);
-    const e = b % 4;
-    const f = Math.floor((b + 8) / 25);
-    const g = Math.floor((b - f + 1) / 3);
-    const h = (19 * a + b - d - g + 15) % 30;
-    const i = Math.floor(c / 4);
-    const k = c % 4;
-    const l = (32 + 2 * e + 2 * i - h - k) % 7;
-    const m = Math.floor((a + 11 * h + 22 * l) / 451);
-    const mes = Math.floor((h + l - 7 * m + 114) / 31);
-    const dia = ((h + l - 7 * m + 114) % 31) + 1;
-    return new Date(ano, mes - 1, dia);
-}
-
-// Função para obter a lista completa de feriados (fixos + móveis) (mantida caso queira utilizar no futuro)
-function obterFeriados(ano) {
-    const feriadosFixos = [
-        '01-01', // Ano Novo
-        '04-21', // Tiradentes
-        '05-01', // Dia do Trabalhador
-        '09-07', // Independência do Brasil
-        '10-12', // Nossa Senhora Aparecida
-        '11-02', // Finados
-        '11-15', // Proclamação da República
-        '12-25'  // Natal
-    ];
-
-    const feriados = [...feriadosFixos.map(d => `${ano}-${d}`)];
-
-    // Feriados móveis
-    const pascoa = calcularPascoa(ano);
-    const carnaval = new Date(pascoa);
-    carnaval.setDate(carnaval.getDate() - 47); // Carnaval é 47 dias antes da Páscoa
-    const corpusChristi = new Date(pascoa);
-    corpusChristi.setDate(corpusChristi.getDate() + 60); // Corpus Christi é 60 dias após a Páscoa
-
-    // Adicionar feriados móveis à lista
-    feriados.push(
-        pascoa.toISOString().slice(0, 10),
-        carnaval.toISOString().slice(0, 10),
-        corpusChristi.toISOString().slice(0, 10)
-    );
-
-    return feriados;
-}
 
 // Função para processar arquivos GPX e agendar tarefas
 function processGpxFiles() {
@@ -159,89 +127,69 @@ function sendDataToDatabase(filePath, { idRota, empresa, turno }) {
             return;
         }
 
-        let quilometragemOriginal = 0;
-        let tempoRotaOriginal = null;
+        // Extrair a descrição do lugar correto
+        let descricao = '';
+        if (jsonObj.gpx.metadata && jsonObj.gpx.metadata.desc) {
+            descricao = jsonObj.gpx.metadata.desc;
+        } else if (track.desc) {
+            descricao = track.desc;
+        }
+
         let quilometragem = 0;
-        let tempoRota = null;
+        let tempoRota = 0;
 
         try {
             const trackSegments = Array.isArray(track.trkseg) ? track.trkseg : [track.trkseg];
             const trackPoints = trackSegments.flatMap(seg => Array.isArray(seg.trkpt) ? seg.trkpt : [seg.trkpt]);
 
-            // Calcular a quilometragem e tempo de rota originais
+            // Calcular distâncias e quilometragem
+            let totalDistance = 0;
+            const distances = [];
+
             for (let i = 0; i < trackPoints.length - 1; i++) {
                 const pontoA = trackPoints[i];
                 const pontoB = trackPoints[i + 1];
 
-                const distancia = geolib.getDistance(
+                const distance = geolib.getDistance(
                     { latitude: parseFloat(pontoA['@_lat']), longitude: parseFloat(pontoA['@_lon']) },
                     { latitude: parseFloat(pontoB['@_lat']), longitude: parseFloat(pontoB['@_lon']) }
                 );
 
-                quilometragemOriginal += distancia;
-            }
-            quilometragemOriginal = quilometragemOriginal / 1000;
-
-            const timesOriginal = trackPoints
-                .map(point => new Date(point.time))
-                .filter(time => !isNaN(time));
-
-            if (timesOriginal.length > 1) {
-                const timeStampsOriginal = timesOriginal.map(time => time.getTime());
-                tempoRotaOriginal = (Math.max(...timeStampsOriginal) - Math.min(...timeStampsOriginal)) / 1000;
-            } else {
-                tempoRotaOriginal = null;
+                distances.push(distance);
+                totalDistance += distance;
             }
 
-            const coordenadaVariacao = 0.00002;
+            quilometragem = totalDistance / 1000; // Converter para km
+
+            // Cálculo do tempo de rota com base na velocidade média de 40 km/h
+            const averageSpeed = 40; // km/h
+            const totalTimeHours = quilometragem / averageSpeed; // Tempo em horas
+            const totalTimeMinutes = totalTimeHours * 60; // Converter para minutos
+            const totalTimeSeconds = totalTimeHours * 3600; // Converter para segundos
+            tempoRota = totalTimeMinutes;
+
+            // Atribuir timestamps aos pontos
+            const startTime = new Date();
+            let accumulatedTime = 0;
+
             for (let i = 0; i < trackPoints.length; i++) {
-                const point = trackPoints[i];
-
-                const latVariacao = (Math.random() * (2 * coordenadaVariacao)) - coordenadaVariacao;
-                const lonVariacao = (Math.random() * (2 * coordenadaVariacao)) - coordenadaVariacao;
-
-                point['@_lat'] = (parseFloat(point['@_lat']) + latVariacao).toFixed(6);
-                point['@_lon'] = (parseFloat(point['@_lon']) + lonVariacao).toFixed(6);
-            }
-
-            for (let i = 0; i < trackPoints.length - 1; i++) {
-                const pontoA = trackPoints[i];
-                const pontoB = trackPoints[i + 1];
-
-                const distancia = geolib.getDistance(
-                    { latitude: parseFloat(pontoA['@_lat']), longitude: parseFloat(pontoA['@_lon']) },
-                    { latitude: parseFloat(pontoB['@_lat']), longitude: parseFloat(pontoB['@_lon']) }
-                );
-
-                quilometragem += distancia;
-            }
-            quilometragem = quilometragem / 1000;
-
-            const distanceChangePercentage = (quilometragem - quilometragemOriginal) / quilometragemOriginal;
-
-            if (tempoRotaOriginal !== null) {
-                tempoRota = tempoRotaOriginal * (1 + distanceChangePercentage);
-            }
-
-            if (timesOriginal.length > 1 && tempoRota !== null) {
-                const startTime = Math.min(...timesOriginal.map(time => time.getTime()));
-                const endTime = startTime + tempoRota * 1000;
-                const timeIncrement = (endTime - startTime) / (trackPoints.length - 1);
-
-                for (let i = 0; i < trackPoints.length; i++) {
-                    const newTime = new Date(startTime + timeIncrement * i);
-                    trackPoints[i].time = newTime.toISOString();
+                if (i === 0) {
+                    trackPoints[i].time = startTime.toISOString();
+                } else {
+                    const timeIntervalSeconds = (distances[i - 1] / totalDistance) * totalTimeSeconds;
+                    accumulatedTime += timeIntervalSeconds * 1000; // Converter para milissegundos
+                    const pointTime = new Date(startTime.getTime() + accumulatedTime);
+                    trackPoints[i].time = pointTime.toISOString();
                 }
             }
 
+            // Atualizar o arquivo GPX com os novos timestamps
             const novoGpx = xmlBuilder.build(jsonObj);
             data = novoGpx;
 
-            console.log(`Quilometragem Original: ${quilometragemOriginal.toFixed(3)} km`);
-            console.log(`Quilometragem Variada: ${quilometragem.toFixed(3)} km`);
-            console.log(`Variação de Quilometragem: ${(distanceChangePercentage * 100).toFixed(2)}%`);
-            console.log(`Tempo Original: ${tempoRotaOriginal !== null ? tempoRotaOriginal.toFixed(0) : 'N/A'} s`);
-            console.log(`Tempo Variado: ${tempoRota !== null ? tempoRota.toFixed(0) : 'N/A'} s`);
+            console.log(`Quilometragem: ${quilometragem.toFixed(3)} km`);
+            console.log(`Tempo de Rota: ${tempoRota.toFixed(2)} minutos`);
+            console.log(`Descrição: ${descricao}`);
 
         } catch (e) {
             console.error('Erro ao modificar dados do GPX:', e);
@@ -250,9 +198,9 @@ function sendDataToDatabase(filePath, { idRota, empresa, turno }) {
         const dataHora = new Date().toISOString();
 
         db.run(`
-            INSERT INTO rotas_gps (rota_id, empresa, data_hora, turno, quilometragem, tempo_de_rota, arquivo_gpx) 
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        `, [idRota, empresa, dataHora, turno, quilometragem, tempoRota, data], (err) => {
+            INSERT INTO rotas_gps (rota_id, empresa, data_hora, turno, quilometragem, tempo_de_rota, descricao, arquivo_gpx) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `, [idRota, empresa, dataHora, turno, quilometragem, tempoRota, descricao, data], (err) => {
             if (err) {
                 console.error('Erro ao inserir dados no banco de dados:', err);
             } else {
@@ -274,73 +222,174 @@ app.set('views', path.join(__dirname, 'views'));
 // Servir arquivos estáticos da pasta 'public'
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Middleware para parsear o corpo das requisições
+app.use(express.urlencoded({ extended: true }));
+
 // Rota principal - Página inicial
 app.get('/', (req, res) => {
     res.render('index');
 });
 
-// Rota para visualizar relatórios
-app.get('/relatorios', (req, res) => {
-    const { empresa } = req.query;
-    let detailedQuery = `SELECT * FROM rotas_gps`;
-    const detailedParams = [];
+// Função para construir a cláusula WHERE e os parâmetros
+function buildWhereClauseAndParams(filters) {
+    let whereClause = '';
+    const params = [];
 
-    if (empresa) {
-        detailedQuery += ` WHERE empresa = ?`;
-        detailedParams.push(empresa);
+    if (filters.empresa) {
+        whereClause += ` AND empresa = ?`;
+        params.push(filters.empresa);
     }
 
-    detailedQuery += ` ORDER BY data_hora DESC`;
+    if (filters.rotaId) {
+        whereClause += ` AND rota_id LIKE ?`;
+        params.push(`%${filters.rotaId}%`);
+    }
 
-    db.all(detailedQuery, detailedParams, (err, rows) => {
-        if (err) {
-            console.error('Erro ao consultar o banco de dados:', err);
-            res.status(500).send('Erro ao obter dados do banco.');
-            return;
-        }
+    if (filters.descricao) {
+        whereClause += ` AND descricao LIKE ?`;
+        params.push(`%${filters.descricao}%`);
+    }
 
-        // Query para dados agregados
+    if (filters.turno) {
+        whereClause += ` AND turno = ?`;
+        params.push(filters.turno);
+    }
+
+    if (filters.dataInicio) {
+        whereClause += ` AND date(substr(data_hora, 1, 10)) >= date(?)`;
+        params.push(filters.dataInicio);
+    }
+
+    if (filters.dataFim) {
+        whereClause += ` AND date(substr(data_hora, 1, 10)) <= date(?)`;
+        params.push(filters.dataFim);
+    }
+
+    return { whereClause, params };
+}
+
+// Rota para visualizar relatórios
+app.get('/relatorios', (req, res) => {
+    const tab = req.query.tab || 'detalhados'; // Aba ativa (detalhados ou agregados)
+    const { empresa, rotaId, descricao, turno, dataInicio, dataFim } = req.query;
+
+    const empresasPromise = new Promise((resolve, reject) => {
+        db.all(`SELECT DISTINCT empresa FROM rotas_gps`, [], (err, empresas) => {
+            if (err) {
+                reject(err);
+            } else {
+                resolve(empresas.map(e => e.empresa));
+            }
+        });
+    });
+
+    if (tab === 'detalhados') {
+        // Parâmetros de paginação
+        const page = parseInt(req.query.page) || 1;
+        const limit = 10;
+        const offset = (page - 1) * limit;
+
+        // Construir a cláusula WHERE e os parâmetros
+        const { whereClause, params } = buildWhereClauseAndParams({ empresa, rotaId, descricao, turno, dataInicio, dataFim });
+
+        // Consulta de contagem
+        const countQuery = `SELECT COUNT(*) as total FROM rotas_gps WHERE 1=1 ${whereClause}`;
+        db.get(countQuery, params, (err, countResult) => {
+            if (err) {
+                console.error('Erro ao contar registros:', err);
+                res.status(500).send('Erro ao obter dados do banco.');
+                return;
+            }
+
+            const totalRecords = countResult.total;
+            const totalPages = Math.ceil(totalRecords / limit);
+
+            // Consulta de dados com paginação
+            const detailedQuery = `SELECT * FROM rotas_gps WHERE 1=1 ${whereClause} ORDER BY data_hora DESC LIMIT ? OFFSET ?`;
+            const detailedParams = [...params, limit, offset];
+
+            db.all(detailedQuery, detailedParams, (err, rows) => {
+                if (err) {
+                    console.error('Erro ao consultar o banco de dados:', err);
+                    res.status(500).send('Erro ao obter dados do banco.');
+                    return;
+                }
+
+                empresasPromise.then(empresas => {
+                    // Construir a query string para paginação
+                    const queryObj = { ...req.query };
+                    delete queryObj.page;
+                    const paginationQuery = new URLSearchParams(queryObj).toString();
+
+                    res.render('relatorios', {
+                        tab: 'detalhados',
+                        rotas: rows,
+                        aggregate: null,
+                        empresas: empresas,
+                        selectedEmpresa: empresa || '',
+                        rotaId: rotaId || '',
+                        descricao: descricao || '',
+                        turno: turno || '',
+                        currentPage: page,
+                        totalPages,
+                        paginationQuery,
+                        dataInicio: dataInicio || '',
+                        dataFim: dataFim || ''
+                    });
+                }).catch(err => {
+                    console.error('Erro ao obter empresas:', err);
+                    res.status(500).send('Erro ao obter dados do banco.');
+                });
+            });
+        });
+    } else if (tab === 'agregados') {
+        // Construir a cláusula WHERE e os parâmetros
+        const { whereClause, params } = buildWhereClauseAndParams({ empresa, dataInicio, dataFim });
+
         let aggregateQuery = `
             SELECT 
                 rota_id,
-                date(data_hora) as data,
+                MAX(descricao) as descricao,
+                date(substr(data_hora, 1, 10)) as data,
                 SUM(quilometragem) as total_quilometragem,
                 AVG(tempo_de_rota) as avg_tempo_rota
             FROM rotas_gps
+            WHERE 1=1 ${whereClause}
+            GROUP BY rota_id, data
+            ORDER BY data DESC, rota_id
         `;
-        const aggregateParams = [];
 
-        if (empresa) {
-            aggregateQuery += ` WHERE empresa = ?`;
-            aggregateParams.push(empresa);
-        }
-
-        aggregateQuery += ` GROUP BY rota_id, date(data_hora) ORDER BY data DESC, rota_id`;
-
-        db.all(aggregateQuery, aggregateParams, (err, aggregateRows) => {
+        db.all(aggregateQuery, params, (err, aggregateRows) => {
             if (err) {
                 console.error('Erro ao consultar dados agregados:', err);
                 res.status(500).send('Erro ao obter dados agregados do banco.');
                 return;
             }
 
-            // Obter lista única de empresas para o filtro
-            db.all(`SELECT DISTINCT empresa FROM rotas_gps`, [], (err, empresas) => {
-                if (err) {
-                    console.error('Erro ao obter empresas:', err);
-                    res.status(500).send('Erro ao obter dados do banco.');
-                    return;
-                }
-
+            empresasPromise.then(empresas => {
                 res.render('relatorios', {
-                    rotas: rows,
+                    tab: 'agregados',
+                    rotas: [],
                     aggregate: aggregateRows,
-                    empresas: empresas.map(e => e.empresa),
-                    selectedEmpresa: empresa || ''
+                    empresas: empresas,
+                    selectedEmpresa: empresa || '',
+                    dataInicio: dataInicio || '',
+                    dataFim: dataFim || '',
+                    rotaId: '',
+                    descricao: '',
+                    turno: '',
+                    currentPage: 1,
+                    totalPages: 1,
+                    paginationQuery: ''
                 });
+            }).catch(err => {
+                console.error('Erro ao obter empresas:', err);
+                res.status(500).send('Erro ao obter dados do banco.');
             });
         });
-    });
+    } else {
+        res.redirect('/relatorios?tab=detalhados');
+    }
 });
 
 // Rota para visualizar detalhes de uma rota específica

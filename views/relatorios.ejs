@@ -1,106 +1,214 @@
 <%- include('partials/header') %>
 
-    <h2>Relatórios de Rotas GPS</h2>
+    <h2 class="my-4">Relatórios de Rotas GPS</h2>
 
-    <!-- Formulário de Filtro por Empresa -->
-    <form method="GET" action="/relatorios">
-        <label for="empresa">Filtrar por Empresa:</label>
-        <select name="empresa" id="empresa">
-            <option value="">Todas</option>
-            <% empresas.forEach(function(emp) { %>
-                <option value="<%= emp %>" <%=selectedEmpresa===emp ? 'selected' : '' %>><%= emp %>
-                </option>
-                <% }); %>
-        </select>
-        <button type="submit" class="btn">Filtrar</button>
-    </form>
+    <!-- Nav Tabs para alternar entre os relatórios -->
+    <ul class="nav nav-tabs">
+        <li class="nav-item">
+            <a class="nav-link <%= tab === 'detalhados' ? 'active' : '' %>" href="/relatorios?tab=detalhados">Relatórios
+                Detalhados</a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link <%= tab === 'agregados' ? 'active' : '' %>" href="/relatorios?tab=agregados">Relatórios
+                Agregados</a>
+        </li>
+    </ul>
 
-    <!-- Tabela de Relatórios Detalhados -->
-    <h3>Relatórios Detalhados</h3>
-    <table>
-        <thead>
-            <tr>
-                <th>ID</th>
-                <th>Rota ID</th>
-                <th>Empresa</th>
-                <th>Data e Hora</th>
-                <th>Turno</th>
-                <th>Quilometragem (km)</th>
-                <th>Tempo de Rota (s)</th>
-                <th>Ações</th>
-            </tr>
-        </thead>
-        <tbody>
-            <% if (rotas.length===0) { %>
-                <tr>
-                    <td colspan="8">Nenhuma rota encontrada.</td>
-                </tr>
-                <% } else { %>
-                    <% rotas.forEach(function(rota) { %>
+    <div class="mt-4">
+        <% if (tab==='detalhados' ) { %>
+            <!-- Formulário de Filtro para Relatórios Detalhados -->
+            <h3>Filtrar Relatórios Detalhados</h3>
+            <form method="GET" action="/relatorios" class="mb-4">
+                <input type="hidden" name="tab" value="detalhados" />
+                <div class="form-row">
+                    <div class="form-group col-md-3">
+                        <label for="empresaDetalhados">Empresa:</label>
+                        <select name="empresa" id="empresaDetalhados" class="form-control">
+                            <option value="">Todas</option>
+                            <% empresas.forEach(function(emp) { %>
+                                <option value="<%= emp %>" <%=selectedEmpresa===emp ? 'selected' : '' %>><%= emp %>
+                                </option>
+                                <% }); %>
+                        </select>
+                    </div>
+                    <div class="form-group col-md-3">
+                        <label for="rotaId">Rota ID:</label>
+                        <input type="text" name="rotaId" id="rotaId" value="<%= rotaId || '' %>" class="form-control" />
+                    </div>
+                    <div class="form-group col-md-3">
+                        <label for="descricao">Descrição:</label>
+                        <input type="text" name="descricao" id="descricao" value="<%= descricao || '' %>"
+                            class="form-control" />
+                    </div>
+                    <div class="form-group col-md-3">
+                        <label for="turno">Turno:</label>
+                        <select name="turno" id="turno" class="form-control">
+                            <option value="">Todos</option>
+                            <option value="manha" <%=turno==='manha' ? 'selected' : '' %>>Manhã</option>
+                            <option value="meio" <%=turno==='meio' ? 'selected' : '' %>>Meio-dia</option>
+                            <option value="tarde" <%=turno==='tarde' ? 'selected' : '' %>>Tarde</option>
+                            <option value="noite" <%=turno==='noite' ? 'selected' : '' %>>Noite</option>
+                            <option value="madrugada" <%=turno==='madrugada' ? 'selected' : '' %>>Madrugada</option>
+                        </select>
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary">Filtrar</button>
+            </form>
+
+            <!-- Tabela de Relatórios Detalhados -->
+            <h3>Relatórios Detalhados</h3>
+            <div class="table-responsive">
+                <table class="table table-striped table-bordered">
+                    <thead class="thead-dark">
                         <tr>
-                            <td>
-                                <%= rota.id %>
-                            </td>
-                            <td>
-                                <%= rota.rota_id %>
-                            </td>
-                            <td>
-                                <%= rota.empresa %>
-                            </td>
-                            <td>
-                                <%= new Date(rota.data_hora).toLocaleString('pt-BR') %>
-                            </td>
-                            <td>
-                                <%= rota.turno %>
-                            </td>
-                            <td>
-                                <%= rota.quilometragem.toFixed(3) %>
-                            </td>
-                            <td>
-                                <%= rota.tempo_de_rota !==null ? (rota.tempo_de_rota / 60).toFixed(2) : 'N/A' %> min
-                            </td>
-                            <td><a href="/relatorios/<%= rota.id %>">Detalhes</a></td>
+                            <th>Rota ID</th>
+                            <th>Empresa</th>
+                            <th>Descrição</th>
+                            <th>Turno</th>
+                            <th>Quilometragem (km)</th>
+                            <th>Tempo de Rota (h)</th>
+                            <th>Ações</th>
                         </tr>
-                        <% }); %>
-                            <% } %>
-        </tbody>
-    </table>
+                    </thead>
+                    <tbody>
+                        <% if (rotas.length===0) { %>
+                            <tr>
+                                <td colspan="7">Nenhuma rota encontrada.</td>
+                            </tr>
+                            <% } else { %>
+                                <% rotas.forEach(function(rota) { %>
+                                    <tr>
+                                        <td>
+                                            <%= rota.rota_id %>
+                                        </td>
+                                        <td>
+                                            <%= rota.empresa %>
+                                        </td>
+                                        <td>
+                                            <%= rota.descricao %>
+                                        </td>
+                                        <td>
+                                            <%= rota.turno %>
+                                        </td>
+                                        <td>
+                                            <%= rota.quilometragem.toFixed(3) %>
+                                        </td>
+                                        <td>
+                                            <%= (rota.tempo_de_rota / 60).toFixed(2) %>
+                                        </td>
+                                        <td><a href="/relatorios/<%= rota.id %>"
+                                                class="btn btn-sm btn-info">Detalhes</a></td>
+                                    </tr>
+                                    <% }); %>
+                                        <% } %>
+                    </tbody>
+                </table>
+            </div>
 
-    <!-- Tabela de Relatórios Agregados -->
-    <h3>Relatórios Agregados por Rota e Dia</h3>
-    <table>
-        <thead>
-            <tr>
-                <th>Rota ID</th>
-                <th>Data</th>
-                <th>Quilometragem Total (km)</th>
-                <th>Tempo de Rota Médio (min)</th>
-            </tr>
-        </thead>
-        <tbody>
-            <% if (aggregate.length===0) { %>
-                <tr>
-                    <td colspan="4">Nenhum dado agregado encontrado.</td>
-                </tr>
-                <% } else { %>
-                    <% aggregate.forEach(function(agregado) { %>
-                        <tr>
-                            <td>
-                                <%= agregado.rota_id %>
-                            </td>
-                            <td>
-                                <%= new Date(agregado.data).toLocaleDateString('pt-BR') %>
-                            </td>
-                            <td>
-                                <%= agregado.total_quilometragem.toFixed(3) %>
-                            </td>
-                            <td>
-                                <%= (agregado.avg_tempo_rota / 60).toFixed(2) %>
-                            </td>
-                        </tr>
-                        <% }); %>
+            <!-- Paginação para Relatórios Detalhados -->
+            <nav aria-label="Navegação de página">
+                <ul class="pagination">
+                    <% if (currentPage> 1) { %>
+                        <li class="page-item">
+                            <a class="page-link"
+                                href="?tab=detalhados&page=<%= currentPage -1 %>&<%= paginationQuery %>">Anterior</a>
+                        </li>
+                        <% } else { %>
+                            <li class="page-item disabled">
+                                <span class="page-link">Anterior</span>
+                            </li>
                             <% } %>
-        </tbody>
-    </table>
+                                <li class="page-item active">
+                                    <span class="page-link">Página <%= currentPage %> de <%= totalPages %></span>
+                                </li>
+                                <% if (currentPage < totalPages) { %>
+                                    <li class="page-item">
+                                        <a class="page-link"
+                                            href="?tab=detalhados&page=<%= currentPage +1 %>&<%= paginationQuery %>">Próxima</a>
+                                    </li>
+                                    <% } else { %>
+                                        <li class="page-item disabled">
+                                            <span class="page-link">Próxima</span>
+                                        </li>
+                                        <% } %>
+                </ul>
+            </nav>
+
+            <% } else if (tab==='agregados' ) { %>
+                <!-- Formulário de Filtro para Relatórios Agregados -->
+                <h3>Filtrar Relatórios Agregados</h3>
+                <form method="GET" action="/relatorios" class="mb-4">
+                    <input type="hidden" name="tab" value="agregados" />
+                    <div class="form-row">
+                        <div class="form-group col-md-4">
+                            <label for="empresaAgregados">Empresa:</label>
+                            <select name="empresa" id="empresaAgregados" class="form-control">
+                                <option value="">Todas</option>
+                                <% empresas.forEach(function(emp) { %>
+                                    <option value="<%= emp %>" <%=selectedEmpresa===emp ? 'selected' : '' %>><%= emp %>
+                                    </option>
+                                    <% }); %>
+                            </select>
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label for="dataInicio">Data Início:</label>
+                            <input type="date" name="dataInicio" id="dataInicio" value="<%= dataInicio || '' %>"
+                                class="form-control" />
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label for="dataFim">Data Fim:</label>
+                            <input type="date" name="dataFim" id="dataFim" value="<%= dataFim || '' %>"
+                                class="form-control" />
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Gerar Relatório</button>
+                </form>
+
+                <!-- Tabela de Relatórios Agregados -->
+                <% if (aggregate) { %>
+                    <h3>Relatórios Agregados por Rota e Dia</h3>
+                    <div class="table-responsive">
+                        <table class="table table-striped table-bordered">
+                            <thead class="thead-dark">
+                                <tr>
+                                    <th>Rota ID</th>
+                                    <th>Período</th>
+                                    <th>Descrição</th>
+                                    <th>Quilometragem Total (km)</th>
+                                    <th>Tempo de Rota Médio (h)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <% if (aggregate.length===0) { %>
+                                    <tr>
+                                        <td colspan="4">Nenhum dado agregado encontrado.</td>
+                                    </tr>
+                                    <% } else { %>
+                                        <% aggregate.forEach(function(agregado) { %>
+                                            <tr>
+                                                <td>
+                                                    <%= agregado.rota_id %>
+                                                </td>
+                                                <td>
+                                                    <%= new Date(agregado.data).toLocaleDateString('pt-BR') %>
+                                                </td>
+                                                <td>
+                                                    <%= agregado.descricao %>
+                                                </td>
+                                                <td>
+                                                    <%= agregado.total_quilometragem.toFixed(3) %>
+                                                </td>
+                                                <td>
+                                                    <%= (agregado.avg_tempo_rota / 60).toFixed(2) %>
+                                                </td>
+                                            </tr>
+                                            <% }); %>
+                                                <% } %>
+                            </tbody>
+                        </table>
+                    </div>
+                    <% } %>
+                        <% } %>
+    </div>
 
     <%- include('partials/footer') %>

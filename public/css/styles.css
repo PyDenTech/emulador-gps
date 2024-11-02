@@ -46,18 +46,13 @@ nav a:hover {
 /* Main Content */
 main {
     padding: 40px;
-    min-height: 80vh;
+    min-height: 10vh;
     background-color: #ffffff;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
     margin: 20px auto;
-    max-width: 1200px;
+    max-width: 1900px;
     border-radius: 8px;
     transition: transform 0.3s ease, box-shadow 0.3s ease;
-}
-
-main:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
 }
 
 /* Footer */
