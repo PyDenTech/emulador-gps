@@ -98,7 +98,7 @@ function processGpxFiles() {
     });
 }
 
-// Função para agendar uma tarefa com node-cron
+// Agendar uma tarefa com node-cron
 function scheduleTask(cronExpression, filePath, { idRota, empresa, turno }) {
     cron.schedule(cronExpression, () => {
         // Tarefa executada nos horários agendados
