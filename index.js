@@ -78,7 +78,7 @@ function processGpxFiles() {
                 const horarios = {
                     'manha': '0 7 * * *',        // 07:00 AM todos os dias
                     'meio': '0 13 * * *',        // 01:00 PM todos os dias
-                    'tarde': '30 18 * * *',      // 06:30 PM todos os dias
+                    'tarde': '45 18 * * *',      // 06:45 PM todos os dias
                     'noite': '0 19 * * *',       // 07:00 PM todos os dias
                     'madrugada': '45 23 * * *'   // 11:45 PM todos os dias
                 };
